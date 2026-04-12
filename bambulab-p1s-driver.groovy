@@ -118,6 +118,7 @@ metadata {
 
 def installed() {
     log.info "[BambuP1S] Driver installed"
+    state.printStartTime = null
     initializeState()
 }
 
@@ -132,9 +133,17 @@ def initialize() {
     log.info "[BambuP1S] Initializing"
     initializeState()
     connect()
-    // Schedule periodic full-status refresh
+    scheduleRefresh()
+}
+
+private void scheduleRefresh() {
     int interval = (settings.refreshInterval ?: 120) as int
-    schedule("0/${interval} * * * * ?", "refresh")
+    runIn(interval, "scheduledRefresh")
+}
+
+def scheduledRefresh() {
+    refresh()
+    scheduleRefresh()
 }
 
 def uninstalled() {
@@ -288,40 +297,39 @@ private void processPrintReport(Map json) {
     }
 
     // ── AMS filament ───────────────────────────────────────────
-    // ams_status == 0 means no AMS / AMS idle; the active tray is referenced by ams_rfid_status
-    // We also check vt_tray for external spool
+    // tray_now on each AMS unit indicates the active tray index ("0"–"3").
+    // Values "254"/"255" mean no tray loaded in that unit.
+    // vt_tray is only used when AMS is absent or yields no result.
+    boolean filamentFound = false
     if (p.containsKey("ams")) {
-        def amsData = p.ams
-        // ams_rfid_status & ams_status help identify which tray is active
-        // The simplest approach: look at the currently active tray_type across all AMS
-        // The printer sets an active tray indicator via the ams block's "tray_now" or
-        // the top-level "ams_rfid_status" / subtask info.
-        // We extract from the first loaded tray we find.
-        def amsList = amsData?.ams
+        def amsList = p.ams?.ams
         if (amsList) {
-            boolean found = false
             amsList.each { amsUnit ->
-                if (!found && amsUnit?.tray) {
-                    amsUnit.tray.each { tray ->
-                        if (!found && tray?.tray_type && tray.tray_type != "") {
-                            sendEvent(name: "filamentType", value: tray.tray_type as String)
-                            String hexColor = trayColorToHex(tray.tray_color as String)
-                            sendEvent(name: "filamentColor", value: hexColor)
-                            found = true
-                        }
-                    }
+                if (filamentFound || !amsUnit?.tray) return
+                String trayNow = amsUnit.tray_now?.toString()
+                def activeTray = null
+                if (trayNow && trayNow != "255" && trayNow != "254") {
+                    activeTray = amsUnit.tray.find { it?.id?.toString() == trayNow }
+                }
+                // Fall back to first loaded tray if tray_now is unset or unresolvable
+                if (!activeTray) {
+                    activeTray = amsUnit.tray.find { it?.tray_type && it.tray_type != "" }
+                }
+                if (activeTray?.tray_type && activeTray.tray_type != "") {
+                    sendEvent(name: "filamentType", value: activeTray.tray_type as String)
+                    sendEvent(name: "filamentColor", value: trayColorToHex(activeTray.tray_color as String))
+                    filamentFound = true
                 }
             }
         }
     }
 
-    // External spool (no AMS) — vt_tray
-    if (p.containsKey("vt_tray")) {
+    // External spool (no AMS) — only use vt_tray when AMS didn't supply filament info
+    if (!filamentFound && p.containsKey("vt_tray")) {
         def vt = p.vt_tray
         if (vt?.tray_type) {
             sendEvent(name: "filamentType", value: vt.tray_type as String)
-            String hexColor = trayColorToHex(vt.tray_color as String)
-            sendEvent(name: "filamentColor", value: hexColor)
+            sendEvent(name: "filamentColor", value: trayColorToHex(vt.tray_color as String))
         }
     }
 }
@@ -423,8 +431,9 @@ private void publishCommand(Map payload) {
 }
 
 private void initializeState() {
-    state.sequenceId   = 0
-    state.printStartTime = null
+    state.sequenceId = 0
+    // Note: printStartTime is intentionally NOT reset here so that a preferences
+    // save mid-print does not lose the elapsed-time reference.
     sendEvent(name: "connectionStatus", value: "disconnected")
     sendEvent(name: "printerStatus",    value: "unknown")
     sendEvent(name: "printProgress",    value: 0)
@@ -439,9 +448,9 @@ private void initializeState() {
     sendEvent(name: "bedTemp",          value: 0)
 }
 
-private String nextSeq() {
+private int nextSeq() {
     state.sequenceId = ((state.sequenceId ?: 0) + 1) % 10000
-    return state.sequenceId.toString()
+    return state.sequenceId as int
 }
 
 private String mapGcodeState(String raw) {
