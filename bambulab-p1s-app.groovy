@@ -278,7 +278,7 @@ def onPrinterStatusChange(evt) {
 }
 
 def onProgressChange(evt) {
-    int pct = (evt.value as int)
+    int pct = evt.integerValue ?: 0
 
     // Only fire milestones while actively printing
     if (printerDevice.currentValue("printerStatus") != "printing") return
@@ -346,7 +346,7 @@ private void runAutomation(String trigger) {
 // ──────────────────────────────────────────────────────────────
 
 def updateSummary() {
-    if (!summaryDevice) return
+    if (!summaryDevice || !printerDevice) return
 
     String status    = printerDevice.currentValue("printerStatus")  ?: "unknown"
     int    progress  = (printerDevice.currentValue("printProgress") ?: 0) as int
