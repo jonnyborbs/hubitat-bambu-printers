@@ -4,6 +4,11 @@ A custom Hubitat Elevation driver and companion app for monitoring and controlli
 
 Communication happens over the printer's built-in local MQTT broker (TLS, port 8883) using your LAN access code. Once installed, the printer appears as a standard Hubitat device with attributes you can read in dashboards, trigger on in Rule Machine, and act on through automations.
 
+The chamber light also appears as an independently controllable child device.
+
+
+**Note** - Only one MQTT connection can be active to a printer at a time. If you have Handy or Studio open, the connection may fail. The driver has error handling for this scenario and should recover gracefully, but I have not tested this extensively yet.
+
 ---
 
 ## Features
