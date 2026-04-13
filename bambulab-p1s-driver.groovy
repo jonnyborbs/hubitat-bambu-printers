@@ -101,7 +101,7 @@ metadata {
               type: "number",
               title: "Status Refresh Interval (seconds)",
               description: "How often to request a full-status push (minimum 60 recommended)",
-              defaultValue: 120,
+              defaultValue: 60,
               range: "30..3600",
               required: false
 
