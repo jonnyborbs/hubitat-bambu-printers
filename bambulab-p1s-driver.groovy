@@ -177,19 +177,19 @@ private void deleteChildDevices() {
 
 // Called by Generic Component Switch child when turned on
 void componentOn(cd) {
-    debugLog("componentOn called by child: ${cd.displayName}")
+    debugLog("componentOn received from child device")
     lightOn()
 }
 
 // Called by Generic Component Switch child when turned off
 void componentOff(cd) {
-    debugLog("componentOff called by child: ${cd.displayName}")
+    debugLog("componentOff received from child device")
     lightOff()
 }
 
 // Called by Generic Component Switch child on refresh
 void componentRefresh(cd) {
-    debugLog("componentRefresh called by child: ${cd.displayName}")
+    debugLog("componentRefresh received from child device")
     refresh()
 }
 
@@ -216,17 +216,22 @@ def connect() {
     debugLog("Connecting to MQTT broker: ${broker}")
 
     try {
-        // Username is always "bblp"; password is the LAN access code
+        // Username is always "bblp"; password is the LAN access code.
+        // ignoreSSLIssues is passed as a Groovy named parameter so Hubitat's
+        // MQTT interface accepts the printer's self-signed certificate.
         interfaces.mqtt.connect(
             broker,
             clientId,
             "bblp",
             lanAccessCode as String,
-            [ignoreSSLIssues: true]   // accept self-signed cert
+            ignoreSSLIssues: true
         )
         // mqttClientStatus() callback will fire on connect/disconnect
     } catch (e) {
-        log.error "[BambuP1S] MQTT connect failed: ${e.class.simpleName} — ${e.message}"
+        String reason = e.message ?: e.class.simpleName
+        if (e.hasProperty("reasonCode")) reason += " (code ${e.reasonCode})"
+        if (e.cause)                     reason += " caused by: ${e.cause.message}"
+        log.error "[BambuP1S] MQTT connect failed: ${reason}"
         sendEvent(name: "connectionStatus", value: "disconnected")
         scheduleReconnect()
     }
@@ -426,8 +431,8 @@ def lightOn() {
             led_mode:      "on",
             led_on_time:   500,
             led_off_time:  500,
-            loop_times:    0,
-            interval_time: 0
+            loop_times:    1,
+            interval_time: 1000
         ]
     ])
     sendEvent(name: "chamberLight", value: "on")
@@ -496,7 +501,7 @@ private void publishCommand(Map payload) {
     String topic   = "device/${printerSerial}/request"
     String jsonStr = groovy.json.JsonOutput.toJson(payload)
     debugLog("Publishing to ${topic}: ${jsonStr}")
-    interfaces.mqtt.publish(topic, jsonStr, 1, false)
+    interfaces.mqtt.publish(topic, jsonStr, 0, false)
 }
 
 private void initializeState() {
@@ -518,9 +523,9 @@ private void initializeState() {
     sendEvent(name: "bedTemp",          value: 0)
 }
 
-private int nextSeq() {
+private String nextSeq() {
     state.sequenceId = ((state.sequenceId ?: 0) + 1) % 10000
-    return state.sequenceId as int
+    return state.sequenceId.toString()
 }
 
 private String mapGcodeState(String raw) {
