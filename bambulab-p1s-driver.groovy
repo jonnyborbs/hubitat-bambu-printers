@@ -97,6 +97,19 @@ metadata {
               description: "Found in: touchscreen → Settings → Network",
               required: true
 
+        input name: "mqttRelayHost",
+              type: "text",
+              title: "MQTT Relay Host (optional)",
+              description: "IP of a local Mosquitto relay (e.g. 192.168.1.x). Leave blank to connect directly to the printer via SSL. Use this if status never updates — see README for relay setup.",
+              required: false
+
+        input name: "mqttRelayPort",
+              type: "number",
+              title: "MQTT Relay Port",
+              description: "Port of the local relay (default 1883)",
+              defaultValue: 1883,
+              required: false
+
         input name: "refreshInterval",
               type: "number",
               title: "Status Refresh Interval (seconds)",
@@ -227,22 +240,21 @@ def connect() {
         return
     }
 
-    String broker   = "ssl://${printerIP}:8883"
     String clientId = "hubitat-bambu-${printerSerial}"
+    boolean usingRelay = settings.mqttRelayHost as boolean
+    String broker = usingRelay
+        ? "tcp://${settings.mqttRelayHost}:${settings.mqttRelayPort ?: 1883}"
+        : "ssl://${printerIP}:8883"
 
-    debugLog("Connecting to MQTT broker: ${broker}")
+    log.info "[BambuP1S] Connecting to ${broker}${usingRelay ? ' (via relay)' : ' (direct SSL)'}"
 
     try {
-        // Username is always "bblp"; password is the LAN access code.
-        // ignoreSSLIssues is passed as a Groovy named parameter so Hubitat's
-        // MQTT interface accepts the printer's self-signed certificate.
-        interfaces.mqtt.connect(
-            broker,
-            clientId,
-            "bblp",
-            lanAccessCode as String,
-            ignoreSSLIssues: true
-        )
+        if (usingRelay) {
+            interfaces.mqtt.connect(broker, clientId, null, null)
+        } else {
+            interfaces.mqtt.connect(broker, clientId, "bblp", lanAccessCode as String,
+                ignoreSSLIssues: true)
+        }
         // mqttClientStatus() callback will fire on connect/disconnect
     } catch (e) {
         String reason = e.message ?: e.class.simpleName
@@ -290,8 +302,8 @@ def mqttClientStatus(String status) {
 
         // Subscribe to the printer's report topic
         String reportTopic = "device/${printerSerial}/report"
-        interfaces.mqtt.subscribe(reportTopic, 0)
-        debugLog("Subscribed to: ${reportTopic}")
+        interfaces.mqtt.subscribe(reportTopic, 1)
+        log.info "[BambuP1S] Subscribed to: ${reportTopic}"
 
         // Request a full push immediately
         pauseExecution(500)
@@ -309,7 +321,8 @@ def mqttClientStatus(String status) {
 
 def parse(String event) {
     def msg = interfaces.mqtt.parseMessage(event)
-    debugLog("Received on ${msg.topic}: ${msg.payload}")
+    log.info "[BambuP1S] Message received on ${msg.topic}"
+    debugLog("Payload: ${msg.payload}")
     state.lastMessageTime = now()
 
     Map json
@@ -319,6 +332,12 @@ def parse(String event) {
         log.error "[BambuP1S] JSON parse error: ${e.message}"
         return
     }
+
+    if (!json?.print) {
+        log.info "[BambuP1S] Message has no 'print' key (top-level keys: ${json?.keySet()})"
+        return
+    }
+
     try {
         processPrintReport(json)
     } catch (e) {
@@ -327,9 +346,7 @@ def parse(String event) {
 }
 
 private void processPrintReport(Map json) {
-    // Top-level key for status updates is "print"
-    def p = json?.print
-    if (!p) return
+    def p = json.print
 
     // ── Printer state ──────────────────────────────────────────
     if (p.containsKey("gcode_state")) {
@@ -524,8 +541,8 @@ private void publishCommand(Map payload) {
     }
     String topic   = "device/${printerSerial}/request"
     String jsonStr = groovy.json.JsonOutput.toJson(payload)
-    debugLog("Publishing to ${topic}: ${jsonStr}")
-    interfaces.mqtt.publish(topic, jsonStr, 0, false)
+    log.info "[BambuP1S] Publishing to ${topic}: ${jsonStr}"
+    interfaces.mqtt.publish(topic, jsonStr, 1, false)
 }
 
 private void initializeState() {
