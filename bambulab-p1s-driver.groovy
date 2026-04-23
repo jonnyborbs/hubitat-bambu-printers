@@ -45,8 +45,8 @@
 metadata {
     definition(
         name: "Bambu Lab P1S",
-        namespace: "community",
-        author: "Custom Driver",
+        namespace: "jonnyborbs",
+        author: "Jon Schulman",
         description: "Monitor and control a Bambu Lab P1S 3D printer via local MQTT"
     ) {
         capability "Initialize"
