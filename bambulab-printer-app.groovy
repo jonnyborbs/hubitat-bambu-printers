@@ -17,7 +17,7 @@
 definition(
     name:        "Bambu Lab Printer Manager",
     namespace:   "jonnyborbs",
-    author:      "Custom App",
+    author:      "Jon Schulman",
     description: "Automation and notifications for your Bambu Lab 3D printer",
     category:    "Convenience",
     iconUrl:     "",
