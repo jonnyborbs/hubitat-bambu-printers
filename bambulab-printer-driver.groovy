@@ -494,8 +494,8 @@ def lightOn() {
             led_mode:      "on",
             led_on_time:   500,
             led_off_time:  500,
-            loop_times:    1,
-            interval_time: 1000
+            loop_times:    0,
+            interval_time: 0
         ]
     ])
     sendEvent(name: "chamberLight", value: "on")
@@ -512,8 +512,8 @@ def lightOff() {
             led_mode:      "off",
             led_on_time:   500,
             led_off_time:  500,
-            loop_times:    1,
-            interval_time: 1000
+            loop_times:    0,
+            interval_time: 0
         ]
     ])
     sendEvent(name: "chamberLight", value: "off")
