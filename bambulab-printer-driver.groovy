@@ -105,14 +105,14 @@ metadata {
               required: false
 
         input name: "mqttRelayPort",
-              type: "number",
+              type: "integer",
               title: "MQTT Relay Port",
               description: "Port of the local relay (default 1883)",
               defaultValue: 1883,
               required: false
 
         input name: "refreshInterval",
-              type: "number",
+              type: "integer",
               title: "Status Refresh Interval (seconds)",
               description: "How often to request a full-status push (minimum 60 recommended)",
               defaultValue: 60,
@@ -494,8 +494,8 @@ def lightOn() {
             led_mode:      "on",
             led_on_time:   500,
             led_off_time:  500,
-            loop_times:    0,
-            interval_time: 0
+            loop_times:    1,
+            interval_time: 1000
         ]
     ])
     sendEvent(name: "chamberLight", value: "on")
@@ -512,8 +512,8 @@ def lightOff() {
             led_mode:      "off",
             led_on_time:   500,
             led_off_time:  500,
-            loop_times:    0,
-            interval_time: 0
+            loop_times:    1,
+            interval_time: 1000
         ]
     ])
     sendEvent(name: "chamberLight", value: "off")
